@@ -1,0 +1,101 @@
+#
+# config-example.yaml
+#
+
+# Set to a log level name to enable logging to stderr, or to `false` to
+# leave the logger unconfigured
+log_level: DEBUG
+
+# A list of connections to establish
+# `name` must be unique amongst all connections, and should be the shortest
+#   string possible
+# `protocol` must be a string from the `protocols` dictionary in relay.py
+servers:
+  # Connect to a slack IRC gateway as a client
+  - name: slack
+    protocol: irc
+
+    # Connection info from slack account settings
+    host: myteam.irc.slack.com
+    port: 6697
+    ssl: true
+    pass: password
+    nick: username
+    user: username
+
+    # misc IRC protocol settings
+    vhost: any.domain-like.string
+    realname: any string
+
+    # The channel map defines where received messages are relayed to
+    # The general format is:
+    #   "#mychannel"
+    #     servername: "#theirchannel"
+    # With `servername` being one of the `name` values from this conf file
+    # This always defines a one-way relationship - the reverse mappings must
+    # be explicitly added to other servers if that behavior is desired
+    # You can add a relay channel for any/all defined servers
+    channel_map:
+      "#general":
+        irc: "#slack-gen"
+      "#random":
+        irc: "#random"
+
+    # A list of channels for which to send an IRC JOIN upon connection
+    # Often not necessary if the Slack account used is already joined to
+    # channels via the Slack client
+    join_channels: []
+
+    # Misc IRC relay options
+
+    # Hilight nicknames in messages with a random mirc color code
+    nick_colors: false
+
+    # Send a nickserv IDENTIFY with this password upon connection
+    nickserv_pass: null
+
+  # Connect as a service to an Unreal IRCd server
+  - name: irc
+    protocol: unrealserv
+
+    # Connection info from server configuration
+    host: irc.server.tld
+    port: 7000
+    ssl: true
+    pass: connection_password
+    vhost: my.irc.server.hostname
+
+    # not specified in server conf but must be unique on the IRC network
+    sid: 0AB
+
+    # Any arbitrary description of this server
+    desc: Bridging Relay Services
+
+    # See above example for more details about the format
+    # This completes 2-way connections for all configured slack channels, and
+    # adds a one-way connection to send announcements from the IRC server to
+    # the slack server
+    channel_map:
+      "#slack-gen":
+        slack: "#general"
+      "#random":
+        slack: "#random"
+      "#announce":
+        slack: "#irc-announce"
+
+    # Defines the pseudo-user that will be used to listen to channels and send
+    # service messages (such as connection failure)
+    handle:
+      # These can be any valid values
+      nick: RelayServ
+      user: RelayServ
+      realname: Bridging Relay Service
+
+      # Probably no reason to change this
+      mode: +io
+
+      # Join the user to these channels to receive messages sent to them
+      join_channels:
+        - "#slack-gen"
+        - "#random"
+        - "#announce"
