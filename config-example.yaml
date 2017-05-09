@@ -6,10 +6,16 @@
 # leave the logger unconfigured
 log_level: DEBUG
 
+# Maps protocol names to (module_name, object_name)
+# Objects must define an init_connection() method accepting a parsed server conf
+protocols:
+  irc: [chatrelay.irc, IRCFactory]
+  unrealserv: [chatrelay.irc, UnrealServFactory]
+
 # A list of connections to establish
 # `name` must be unique amongst all connections, and should be the shortest
 #   string possible
-# `protocol` must be a string from the `protocols` dictionary in relay.py
+# `protocol` must be a key from `protocols` above
 servers:
   # Connect to a slack IRC gateway as a client
   - name: slack
@@ -29,7 +35,7 @@ servers:
 
     # The channel map defines where received messages are relayed to
     # The general format is:
-    #   "#mychannel"
+    #   "#mychannel":
     #     servername: "#theirchannel"
     # With `servername` being one of the `name` values from this conf file
     # This always defines a one-way relationship - the reverse mappings must
