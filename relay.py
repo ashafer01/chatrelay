@@ -103,16 +103,6 @@ class IRC(TextProto):
         self.conf = conf
         self.nickcolor = {}
 
-    def relayMessage(self, destchan, message, fromnick=None, fromserver=None):
-        if fromnick:
-            if self.conf['nick_colors']:
-                color = self.nickcolor.setdefault(fromnick, random.choice(IRC.mirc_colors))
-                nick = '\x03{0}{1}\x03'.format(color, fromnick)
-            else:
-                nick = fromnick
-            message = '<{0}> {1}'.format(nick, message)
-        self.sendLine('PRIVMSG {0} :{1}'.format(destchan, message))
-
     def lineReceived(self, raw_line):
         logger.debug("{0} <= {1}".format(self.conf['name'], raw_line))
         line = IRCLine.parse(raw_line)
@@ -127,13 +117,23 @@ class IRC(TextProto):
             for mychan, map in self.conf['channel_map'].items():
                 if mychan in line.args:
                     for dest, destchan in map.items():
-                        servers[dest].relayMessage(destchan, line.text, line.handle.nick, self.conf['name'])
+                        servers[dest].relay_message(destchan, line.text, line.handle.nick, self.conf['name'])
 
     def connectionMade(self):
         logger.info('{name} :: Connected'.format(**self.conf))
         self.sendLine('PASS {pass}'.format(**self.conf))
         self.sendLine('NICK {nick}'.format(**self.conf))
         self.sendLine('USER {user} {vhost} {host} :{realname}'.format(**self.conf))
+
+    def relay_message(self, destchan, message, fromnick=None, fromserver=None):
+        if fromnick:
+            if self.conf['nick_colors']:
+                color = self.nickcolor.setdefault(fromnick, random.choice(IRC.mirc_colors))
+                nick = '\x03{0}{1}\x03'.format(color, fromnick)
+            else:
+                nick = fromnick
+            message = '<{0}> {1}'.format(nick, message)
+        self.sendLine('PRIVMSG {0} :{1}'.format(destchan, message))
 
 
 class UnrealServ(TextProto):
@@ -154,7 +154,7 @@ class UnrealServ(TextProto):
         uid = self.conf['sid'] + ('0' * 6)
         self.sendLine(':{0} UID {nick} 0 {1} {user} {2} {3} 0 {mode} * * :{realname}'.format(
             self.conf['sid'], time(), self.conf['vhost'], uid, **self.conf['handle']))
-        self.nicks[self.conf['handle']['nick']] = uid
+        self.nicks[self.conf['handle']['nick'].lower()] = uid
         for chan in self.conf['handle']['join_channels']:
             self.sendLine(':{0} SJOIN {1} {2} :{3}'.format(self.conf['sid'], time(), chan, uid))
 
@@ -166,27 +166,27 @@ class UnrealServ(TextProto):
         if line.cmd == 'PING':
             self.sendLine(':{0} PONG {1} :{2}'.format(self.conf['sid'], self.conf['vhost'], line.text))
         elif line.cmd == 'UID':
-            self.remote_nicks.add(line.args[0])
+            self.remote_nicks.add(line.args[0].lower())
         elif line.cmd == 'PRIVMSG':
             for mychan, map in self.conf['channel_map'].items():
                 if mychan in line.args:
                     for dest, destchan in map.items():
-                        servers[dest].relayMessage(destchan, line.text, line.prefix, self.conf['name'])
+                        servers[dest].relay_message(destchan, line.text, line.prefix, self.conf['name'])
 
-    def relayMessage(self, destchan, message, fromnick=None, fromserver=None):
+    def relay_message(self, destchan, message, fromnick=None, fromserver=None):
         if fromnick:
-            if fromserver and fromnick in self.remote_nicks:
+            if fromserver and fromnick.lower() in self.remote_nicks:
                 fromnick += '_'+fromserver
-            while fromnick in self.remote_nicks:
+            while fromnick.lower() in self.remote_nicks:
                 fromnick += '_'
-            if fromnick not in self.nicks:
+            if fromnick.lower() not in self.nicks:
                 uid = self.conf['sid'] + str(len(self.nicks)).zfill(6)
                 self.sendLine(':{sid} UID {0} 0 {1} {0} {vhost} {2} 0 +i * * :{0}'.format(
                     fromnick, time(), uid, **self.conf))
-                self.nicks[fromnick] = uid
+                self.nicks[fromnick.lower()] = uid
         else:
             fromnick = self.conf['handle']['nick']
-        uid = self.nicks[fromnick]
+        uid = self.nicks[fromnick.lower()]
         self.sendLine(':{0} PRIVMSG {1} :{2}'.format(uid, destchan, message))
 
 
@@ -214,7 +214,7 @@ class BasicFactory(ClientFactory):
         try:
             for map in self.conf['channel_map'].values():
                 for dest, destchan in map.items():
-                    servers[dest].relayMessage(destchan, 'Lost connection to {0}, retrying in 30s'.format(self.conf['name']))
+                    servers[dest].relay_message(destchan, 'Lost connection to {0}, retrying in 30s'.format(self.conf['name']))
         except Exception:
             logger.warn('lost connection sendLine failed')
         finally:
@@ -226,7 +226,7 @@ class BasicFactory(ClientFactory):
         try:
             for map in self.conf['channel_map'].values():
                 for dest, destchan in map.items():
-                    servers[dest].relayMessage(destchan, 'Failed to connect to {0}, retrying in 30s'.format(self.conf['name']))
+                    servers[dest].relay_message(destchan, 'Failed to connect to {0}, retrying in 30s'.format(self.conf['name']))
         except Exception:
             logger.warn('failed connection sendLine failed')
         finally:
@@ -268,7 +268,13 @@ def run():
             stderrHandler.setLevel(getattr(logging, conf['log_level']))
             logger.addHandler(stderrHandler)
 
+        names = set()
         for server in conf['servers']:
+            name = server['name']
+            if name in names:
+                raise RuntimeError('Duplicate server name in {0}: {1}'.format(config_fn, name))
+            else:
+                names.add(name)
             protocols[server['protocol']].init_connection(server)
     reactor.run()
 
