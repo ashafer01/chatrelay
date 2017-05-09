@@ -5,7 +5,7 @@ import logging
 import random
 import re
 
-logger = logging.getLogger('bridgerelay')
+logger = logging.getLogger('chatrelay')
 
 def time():
     return int(_time())

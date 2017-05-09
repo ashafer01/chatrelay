@@ -4,7 +4,7 @@ from twisted.internet import reactor, ssl
 import logging
 
 __all__ = []
-logger = logging.getLogger('bridgerelay')
+logger = logging.getLogger('chatrelay')
 
 servers = {}
 

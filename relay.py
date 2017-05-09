@@ -1,15 +1,15 @@
+from importlib import import_module
 from twisted.internet import reactor
 import logging
+import sys
+import yaml
 
-logger = logging.getLogger('bridgerelay')
+logger = logging.getLogger('chatrelay')
 logger.addHandler(logging.NullHandler())
 logger.setLevel(logging.DEBUG)
 
 def run():
     """main entry point"""
-
-    import sys
-    import yaml
 
     try:
         config_fn = sys.argv[1]
@@ -33,7 +33,7 @@ def run():
         else:
             names.add(name)
         modname, objname = conf['protocols'][server['protocol']]
-        getattr(__import__(modname), objname).init_connection(server)
+        getattr(import_module(modname), objname).init_connection(server)
     reactor.run()
 
 if __name__ == '__main__':
