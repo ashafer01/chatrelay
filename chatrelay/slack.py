@@ -44,8 +44,12 @@ class SlackBot(WebSocketClientProtocol):
         if isBinary:
             raise RuntimeError('Slack sent binary websocket message')
         logger.debug('{0} <= {1}'.format(self.conf['name'], payload))
-        msg = json.loads(payload)
-        if msg['type'] == 'message':
+        msg = json.loads(payload.decode('utf-8'))
+        mtype = msg['type']
+        if mtype == 'message':
+            if msg.get('subtype') == 'message_changed':
+                logger.debug('{0} :: Ignoring message change'.format(self.conf['name']))
+                return
             if msg.get('bot_id') != self.conf['bot_id']:
                 channel = self._state.channels[msg['channel']]
                 if 'user' in msg:
@@ -54,12 +58,23 @@ class SlackBot(WebSocketClientProtocol):
                     user = msg['username']
                 else:
                     raise RuntimeError('Cannot find user name for message')
-                logger.debug('>> Message from {0} to {1}: {2}'.format(user, channel, msg['text']))
-                map = self.conf['channel_map'][channel]
+                msgparts = [msg['text']]
+                for attachment in msg.get('attachments', []):
+                    msgparts.append(attachment['fallback'])
+                mtext = ' | '.join(msgparts)
+                logger.debug('>> Recvd message from {0} to {1}: {2}'.format(user, channel, mtext))
+                map = self.conf['channel_map'].get(channel, {})
                 for dest, destchan in map.items():
-                    servers[dest].relay_message(destchan, msg['text'], user, self.conf['name'])
+                    servers[dest].relay_message(destchan, mtext, user, self.conf['name'])
             else:
                 logger.debug('{0} :: Ignoring own message'.format(self.conf['name']))
+        elif mtype == 'user_change':
+            id = msg['user']['id']
+            name = msg['user']['name']
+            self._state.users[id] = name
+            logger.debug('{0} :: Recvd user change: {1} => {2}'.format(self.conf['name'], id, name))
+        else:
+            logger.debug('{0} :: Ignoring unhandled type {1}'.format(self.conf['name'], mtype))
 
     def onClose(self, wasClean, code, reason):
         logger.debug('SlackBot closed - wasClean={0} code={1} reason={2}'.format(wasClean, code, reason))
