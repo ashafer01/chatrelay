@@ -11,6 +11,7 @@ log_level: DEBUG
 protocols:
   irc: [chatrelay.irc, IRCFactory]
   unrealserv: [chatrelay.irc, UnrealServFactory]
+  slackbot: [chatrelay.slack, SlackWSFactory]
 
 # A list of connections to establish
 # `name` must be unique amongst all connections, and should be the shortest
@@ -18,7 +19,7 @@ protocols:
 # `protocol` must be a key from `protocols` above
 servers:
   # Connect to a slack IRC gateway as a client
-  - name: slack
+  - name: slackirc
     protocol: irc
 
     # Connection info from slack account settings
@@ -60,6 +61,27 @@ servers:
     # Send a nickserv IDENTIFY with this password upon connection
     nickserv_pass: null
 
+  # Connect to Slack natively as a bot
+  - name: slack
+    protocol: slackbot
+
+    # Your Bot's ID
+    # Available at the end of the URL when editing bot configuration
+    bot_id: B...
+
+    # Slack bot API token https://my.slack.com/services/new/bot
+    api_token: xoxb-...
+
+    # See top example for more details about the format
+    # Note that the bot must be invited to channels by a user in order to
+    # receive messages from that channel - there is no join_channels for the
+    # slackbot protocol
+    channel_map:
+      "#general":
+        irc: "#slack-gen"
+      "#random":
+        irc: "#random"
+
   # Connect as a service to an Unreal IRCd server
   - name: irc
     protocol: unrealserv
@@ -77,7 +99,7 @@ servers:
     # Any arbitrary description of this server
     desc: Bridging Relay Services
 
-    # See above example for more details about the format
+    # See top example for more details about the format
     # This completes 2-way connections for all configured slack channels, and
     # adds a one-way connection to send announcements from the IRC server to
     # the slack server
