@@ -46,33 +46,44 @@ class SlackBot(WebSocketClientProtocol):
         logger.debug('{0} <= {1}'.format(self.conf['name'], payload))
         msg = json.loads(payload.decode('utf-8'))
         mtype = msg['type']
+        if msg.get('user') == 'USLACKBOT':
+            logger.debug('{0} :: Ignoring slackbot message'.format(self.conf['name']))
+            return
         if mtype == 'message':
             if msg.get('subtype') == 'message_changed':
                 logger.debug('{0} :: Ignoring message change'.format(self.conf['name']))
                 return
-            if msg.get('bot_id') != self.conf['bot_id']:
-                channel = self._state.channels[msg['channel']]
-                if 'user' in msg:
-                    user = self._state.users[msg['user']]
-                elif 'username' in msg:
-                    user = msg['username']
-                else:
-                    raise RuntimeError('Cannot find user name for message')
-                msgparts = [msg['text']]
-                for attachment in msg.get('attachments', []):
-                    msgparts.append(attachment['fallback'])
-                mtext = ' | '.join(msgparts)
-                logger.debug('>> Recvd message from {0} to {1}: {2}'.format(user, channel, mtext))
-                map = self.conf['channel_map'].get(channel, {})
+            if msg.get('bot_id') == self.conf['bot_id']:
+                logger.debug('{0} :: Ignoring own message'.format(self.conf['name']))
+                return
+            channel = self._state.channels[msg['channel']]
+            if 'user' in msg:
+                user = self._state.users[msg['user']]
+            elif 'username' in msg:
+                user = msg['username']
+            else:
+                raise RuntimeError('Cannot find user name for message')
+            msgparts = [msg['text']]
+            for attachment in msg.get('attachments', []):
+                msgparts.append(attachment['fallback'])
+            mtext = ' | '.join(msgparts)
+            logger.debug('>> Recvd message from {0} to {1}: {2}'.format(user, channel, mtext))
+            try:
+                map = self.conf['channel_map'][channel]
                 for dest, destchan in map.items():
                     servers[dest].relay_message(destchan, mtext, user, self.conf['name'])
-            else:
-                logger.debug('{0} :: Ignoring own message'.format(self.conf['name']))
-        elif mtype == 'user_change':
+            except KeyError:
+                logger.debug('{0} :: Channel {1} not mapped'.format(self.conf['name'], channel))
+        elif mtype == 'user_change' or mtype == 'team_join':
             id = msg['user']['id']
             name = msg['user']['name']
             self._state.users[id] = name
-            logger.debug('{0} :: Recvd user change: {1} => {2}'.format(self.conf['name'], id, name))
+            logger.debug('>> Recvd user: {0} => {1}'.format(id, name))
+        elif mtype == 'channel_created':
+            id = msg['channel']['id']
+            name = msg['channel']['name']
+            self._state.channels[id] = name
+            logger.debug('>> Recvd channel: {0} => {1}'.format(id, name))
         else:
             logger.debug('{0} :: Ignoring unhandled type {1}'.format(self.conf['name'], mtype))
 
