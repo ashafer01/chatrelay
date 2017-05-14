@@ -43,12 +43,10 @@ class SlackBot(WebSocketClientProtocol):
     def onMessage(self, payload, isBinary):
         if isBinary:
             raise RuntimeError('Slack sent binary websocket message')
+        payload = payload.decode('utf-8')
         logger.debug('{0} <= {1}'.format(self.conf['name'], payload))
-        msg = json.loads(payload.decode('utf-8'))
+        msg = json.loads(payload)
         mtype = msg['type']
-        if msg.get('user') == 'USLACKBOT':
-            logger.debug('{0} :: Ignoring slackbot message'.format(self.conf['name']))
-            return
         if mtype == 'message':
             if msg.get('subtype') == 'message_changed':
                 logger.debug('{0} :: Ignoring message change'.format(self.conf['name']))
@@ -57,10 +55,10 @@ class SlackBot(WebSocketClientProtocol):
                 logger.debug('{0} :: Ignoring own message'.format(self.conf['name']))
                 return
             channel = self._state.channels[msg['channel']]
-            if 'user' in msg:
-                user = self._state.users[msg['user']]
-            elif 'username' in msg:
+            if 'username' in msg:
                 user = msg['username']
+            elif 'user' in msg:
+                user = self._state.users[msg['user']]
             else:
                 raise RuntimeError('Cannot find user name for message')
             msgparts = [msg['text']]
@@ -79,7 +77,7 @@ class SlackBot(WebSocketClientProtocol):
             name = msg['user']['name']
             self._state.users[id] = name
             logger.debug('>> Recvd user: {0} => {1}'.format(id, name))
-        elif mtype == 'channel_created':
+        elif mtype == 'channel_created' or mtype == 'channel_rename':
             id = msg['channel']['id']
             name = msg['channel']['name']
             self._state.channels[id] = name
@@ -105,7 +103,7 @@ class SlackWSFactory(WebSocketClientFactory):
         wsurl = res['url']
         logger.debug('{0} :: Got websocket url = {1}'.format(conf['name'], wsurl))
         logger.debug('{0} :: rtm.start response\n{1}'.format(
-            conf['name'], json.dumps(res, indent=4, separators=(',', ': '))))
+            conf['name'], json.dumps(res, indent=2, separators=(',', ': '))))
         factory = cls(conf, State(res), wsurl)
 
         proto, url = wsurl.split('://', 1)
@@ -145,7 +143,7 @@ class SlackWSFactory(WebSocketClientFactory):
 
 class State(object):
     def __init__(self, rtm_start_res):
-        self.users = {}
+        self.users = {'USLACKBOT':'SLACK'}
         for user in rtm_start_res['users']:
             self.users[user['id']] = user['name']
 
