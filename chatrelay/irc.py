@@ -94,8 +94,9 @@ class IRC(TextProto):
         logger.debug("{0} <= {1}".format(self.conf['name'], raw_line))
         line = IRCLine.parse(raw_line)
         if line.cmd == '001':
-            if self.conf['nickserv_pass']:
-                self.sendLine('PRIVMSG NickServ :IDENTIFY {0}'.format(self.conf['nickserv_pass']))
+            nsp = self.conf.get('nickserv_pass')
+            if nsp:
+                self.sendLine('PRIVMSG NickServ :IDENTIFY {0}'.format(nsp))
             for chan in self.conf['join_channels']:
                 self.sendLine('JOIN {0}'.format(chan))
         elif line.cmd == 'PING':
@@ -114,7 +115,7 @@ class IRC(TextProto):
 
     def relay_message(self, destchan, message, fromnick=None, fromserver=None):
         if fromnick:
-            if self.conf['nick_colors']:
+            if self.conf.get('nick_colors'):
                 color = self.nickcolor.setdefault(fromnick, random.choice(IRC.mirc_colors))
                 nick = '\x03{0}{1}\x03'.format(color, fromnick)
             else:

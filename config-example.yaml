@@ -53,7 +53,7 @@ servers:
     # channels via the Slack client
     join_channels: []
 
-    # Misc IRC relay options
+    # Optional - Misc IRC relay options
 
     # Hilight nicknames in messages with a random mirc color code
     nick_colors: false
@@ -81,6 +81,23 @@ servers:
         irc: "#slack-gen"
       "#random":
         irc: "#random"
+
+    # Use this as username when we use message text prepared for a more complex
+    # Slack-specific message subtype which doesn't have top-level identity
+    # associated with it
+    default_username: SLACK
+
+    # Optional - defaults to default_username
+    # Provides mapping for the slackbot user
+    slackbot_username: slackbot
+
+    # Optional - Replace slack emoji names with text-based equivalents when needed
+    emoji_map:
+        ":slightly_smiling_face": ":)"
+
+    # Optional - default true
+    # Set to false to ignore service messages sent from other connections
+    relay_service_messages: false
 
   # Connect as a service to an Unreal IRCd server
   - name: irc
