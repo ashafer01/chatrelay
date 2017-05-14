@@ -1,5 +1,6 @@
 from . import servers, BasicFactory
 from autobahn.twisted.websocket import WebSocketClientProtocol, WebSocketClientFactory
+from autobahn.websocket.util import parse_url as parse_ws_url
 from twisted.internet import reactor, ssl
 import json
 import logging
@@ -37,7 +38,7 @@ class SlackBot(WebSocketClientProtocol):
         m = requests.get(apiurl('chat.postMessage'), params=params)
         res = m.json()
         if not res['ok']:
-            logger.error('Failed to post message, response:\n{0}'.format(m.text))
+            logger.error('>> Failed to post message, response:\n{0}'.format(m.text))
             raise RuntimeError('Failed to post message to {0}'.format(self.conf['name']))
 
     def onMessage(self, payload, isBinary):
@@ -49,10 +50,10 @@ class SlackBot(WebSocketClientProtocol):
         mtype = msg['type']
         if mtype == 'message':
             if msg.get('subtype') == 'message_changed':
-                logger.debug('{0} :: Ignoring message change'.format(self.conf['name']))
+                logger.debug('>> Ignoring message change')
                 return
             if msg.get('bot_id') == self.conf['bot_id']:
-                logger.debug('{0} :: Ignoring own message'.format(self.conf['name']))
+                logger.debug('>> Ignoring own message')
                 return
             channel = self._state.channels[msg['channel']]
             if 'username' in msg:
@@ -71,7 +72,7 @@ class SlackBot(WebSocketClientProtocol):
                 for dest, destchan in map.items():
                     servers[dest].relay_message(destchan, mtext, user, self.conf['name'])
             except KeyError:
-                logger.debug('{0} :: Channel {1} not mapped'.format(self.conf['name'], channel))
+                logger.debug('>> Channel {0} not mapped'.format(channel))
         elif mtype == 'user_change' or mtype == 'team_join':
             id = msg['user']['id']
             name = msg['user']['name']
@@ -83,10 +84,10 @@ class SlackBot(WebSocketClientProtocol):
             self._state.channels[id] = name
             logger.debug('>> Recvd channel: {0} => {1}'.format(id, name))
         else:
-            logger.debug('{0} :: Ignoring unhandled type {1}'.format(self.conf['name'], mtype))
+            logger.debug('>> Ignoring unhandled type {0}'.format(mtype))
 
     def onClose(self, wasClean, code, reason):
-        logger.debug('SlackBot closed - wasClean={0} code={1} reason={2}'.format(wasClean, code, reason))
+        logger.debug('{0} :: Closed: wasClean={1} code={2} reason={3}'.format(self.conf['name'], wasClean, code, reason))
 
 
 class SlackWSFactory(WebSocketClientFactory):
@@ -106,27 +107,12 @@ class SlackWSFactory(WebSocketClientFactory):
             conf['name'], json.dumps(res, indent=2, separators=(',', ': '))))
         factory = cls(conf, State(res), wsurl)
 
-        proto, url = wsurl.split('://', 1)
-        if proto == 'ws':
-            default_port = 80
-        elif proto == 'wss':
-            default_port = 443
-        else:
-            logger.error('Unknown protocol for rtm websocket url')
-            raise RuntimeError('Slack server supplied unknown protocol in URL')
-        netloc, path = url.split('/', 1)
-        hp = netloc.rsplit(':', 1)
-        try:
-            host, port = hp
-            port = int(port)
-        except ValueError:
-            host = hp[0]
-            port = default_port
-        logger.debug('{0} :: Connecting to {1}:{2}'.format(conf['name'], host, port))
-        if proto == 'ws':
-            reactor.connectTCP(host, port, factory)
-        elif proto == 'wss':
+        isSecure, host, port, resource, path, params = parse_ws_url(wsurl)
+        logger.debug('{0} :: Connecting to {1}:{2} secure={3}'.format(conf['name'], host, port, isSecure))
+        if isSecure:
             reactor.connectSSL(host, port, factory, ssl.ClientContextFactory())
+        else:
+            reactor.connectTCP(host, port, factory)
 
     def __init__(self, conf, _state, wsurl):
         self.conf = conf
@@ -134,10 +120,12 @@ class SlackWSFactory(WebSocketClientFactory):
         WebSocketClientFactory.__init__(self, wsurl)
 
     def buildProtocol(self, addr):
+        name = self.conf['name']
+        logger.debug('{0} :: buildProtocol'.format(name))
         proto = WebSocketClientFactory.buildProtocol(self, addr)
         proto.conf = self.conf
         proto._state = self._state
-        servers[self.conf['name']] = proto
+        servers[name] = proto
         return proto
 
 
