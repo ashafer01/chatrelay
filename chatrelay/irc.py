@@ -121,7 +121,7 @@ class IRC(TextProto):
             else:
                 nick = fromnick
             message = '<{0}> {1}'.format(nick, message)
-        self.sendLine('PRIVMSG {0} :{1}'.format(destchan, message))
+        self.sendLine(u'PRIVMSG {0} :{1}'.format(destchan, message).encode('utf-8'))
 
 
 class UnrealServ(TextProto):
@@ -175,7 +175,7 @@ class UnrealServ(TextProto):
         else:
             fromnick = self.conf['handle']['nick']
         uid = self.nicks[fromnick.lower()]
-        self.sendLine(':{0} PRIVMSG {1} :{2}'.format(uid, destchan, message))
+        self.sendLine(u':{0} PRIVMSG {1} :{2}'.format(uid, destchan, message).encode('utf-8'))
 
 
 class IRCFactory(BasicFactory):

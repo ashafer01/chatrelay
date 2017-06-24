@@ -93,7 +93,8 @@ servers:
 
     # Optional - Replace slack emoji names with text-based equivalents when needed
     emoji_map:
-        ":slightly_smiling_face": ":)"
+        ":slightly_smiling_face:": ":)"
+        ":disappointed:": ":("
 
     # Optional - default true
     # Set to false to ignore service messages sent from other connections
