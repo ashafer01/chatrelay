@@ -1,4 +1,4 @@
-from . import servers, TextProto, BasicFactory
+from . import servers, TextProto, BasicFactory, tostr
 from time import time as _time
 import collections
 import logging
@@ -69,7 +69,7 @@ class HandleInfo(object):
 
     @classmethod
     def parse(cls, handle):
-        match = re.search('^([^!]+)!([^@]+)@(.+)$', handle.strip())
+        match = re.search(r'^([^!]+)!([^@]+)@(.+)$', handle.strip())
         ret = cls()
         if match is not None:
             ret.nick = match.group(1)
@@ -91,16 +91,17 @@ class IRC(TextProto):
         self.nickcolor = {}
 
     def lineReceived(self, raw_line):
+        raw_line = tostr(raw_line)
         logger.debug("{0} <= {1}".format(self.conf['name'], raw_line))
         line = IRCLine.parse(raw_line)
         if line.cmd == '001':
             nsp = self.conf.get('nickserv_pass')
             if nsp:
-                self.sendLine('PRIVMSG NickServ :IDENTIFY {0}'.format(nsp))
+                self.sendLine(u'PRIVMSG NickServ :IDENTIFY {0}'.format(nsp))
             for chan in self.conf['join_channels']:
-                self.sendLine('JOIN {0}'.format(chan))
+                self.sendLine(u'JOIN {0}'.format(chan))
         elif line.cmd == 'PING':
-            self.sendLine('PONG :{0}'.format(line.text))
+            self.sendLine(u'PONG :{0}'.format(line.text))
         elif line.cmd == 'PRIVMSG':
             for mychan, map in self.conf['channel_map'].items():
                 if mychan in line.args:
@@ -108,10 +109,10 @@ class IRC(TextProto):
                         servers[dest].relay_message(destchan, line.text, line.handle.nick, self.conf['name'])
 
     def connectionMade(self):
-        logger.info('{name} :: Connected'.format(**self.conf))
-        self.sendLine('PASS {pass}'.format(**self.conf))
-        self.sendLine('NICK {nick}'.format(**self.conf))
-        self.sendLine('USER {user} {vhost} {host} :{realname}'.format(**self.conf))
+        logger.info(u'{name} :: Connected'.format(**self.conf))
+        self.sendLine(u'PASS {pass}'.format(**self.conf))
+        self.sendLine(u'NICK {nick}'.format(**self.conf))
+        self.sendLine(u'USER {user} {vhost} {host} :{realname}'.format(**self.conf))
 
     def relay_message(self, destchan, message, fromnick=None, fromserver=None):
         if fromnick:
@@ -121,7 +122,7 @@ class IRC(TextProto):
             else:
                 nick = fromnick
             message = '<{0}> {1}'.format(nick, message)
-        self.sendLine(u'PRIVMSG {0} :{1}'.format(destchan, message).encode('utf-8'))
+        self.sendLine(u'PRIVMSG {0} :{1}'.format(destchan, message))
 
 
 class UnrealServ(TextProto):
@@ -134,25 +135,26 @@ class UnrealServ(TextProto):
 
     def connectionMade(self):
         logger.info('{name} :: Connected'.format(**self.conf))
-        self.sendLine('PASS :{pass}'.format(**self.conf))
-        self.sendLine('PROTOCTL EAUTH={vhost} SID={sid}'.format(**self.conf))
-        self.sendLine('PROTOCTL NOQUIT NICKv2 SJOIN SJ3 CLK TKLEXT TKLEXT2 NICKIP ESVID MLOCK EXTSWHOIS')
-        self.sendLine('SERVER {vhost} 1 :{desc}'.format(**self.conf))
+        self.sendLine(u'PASS :{pass}'.format(**self.conf))
+        self.sendLine(u'PROTOCTL EAUTH={vhost} SID={sid}'.format(**self.conf))
+        self.sendLine(u'PROTOCTL NOQUIT NICKv2 SJOIN SJ3 CLK TKLEXT TKLEXT2 NICKIP ESVID MLOCK EXTSWHOIS')
+        self.sendLine(u'SERVER {vhost} 1 :{desc}'.format(**self.conf))
 
         uid = self.conf['sid'] + ('0' * 6)
-        self.sendLine(':{0} UID {nick} 0 {1} {user} {2} {3} 0 {mode} * * :{realname}'.format(
+        self.sendLine(u':{0} UID {nick} 0 {1} {user} {2} {3} 0 {mode} * * :{realname}'.format(
             self.conf['sid'], time(), self.conf['vhost'], uid, **self.conf['handle']))
         self.nicks[self.conf['handle']['nick'].lower()] = uid
         for chan in self.conf['handle']['join_channels']:
-            self.sendLine(':{0} SJOIN {1} {2} :{3}'.format(self.conf['sid'], time(), chan, uid))
+            self.sendLine(u':{0} SJOIN {1} {2} :{3}'.format(self.conf['sid'], time(), chan, uid))
 
         self.sendLine('EOS')
 
     def lineReceived(self, raw_line):
+        raw_line = tostr(raw_line)
         logger.debug("{0} <= {1}".format(self.conf['name'], raw_line))
         line = IRCLine.parse(raw_line)
         if line.cmd == 'PING':
-            self.sendLine(':{0} PONG {1} :{2}'.format(self.conf['sid'], self.conf['vhost'], line.text))
+            self.sendLine(u':{0} PONG {1} :{2}'.format(self.conf['sid'], self.conf['vhost'], line.text))
         elif line.cmd == 'UID':
             self.remote_nicks.add(line.args[0].lower())
         elif line.cmd == 'PRIVMSG':
@@ -169,13 +171,13 @@ class UnrealServ(TextProto):
                 fromnick += '_'
             if fromnick.lower() not in self.nicks:
                 uid = self.conf['sid'] + str(len(self.nicks)).zfill(6)
-                self.sendLine(':{sid} UID {0} 0 {1} {0} {vhost} {2} 0 +i * * :{0}'.format(
+                self.sendLine(u':{sid} UID {0} 0 {1} {0} {vhost} {2} 0 +i * * :{0}'.format(
                     fromnick, time(), uid, **self.conf))
                 self.nicks[fromnick.lower()] = uid
         else:
             fromnick = self.conf['handle']['nick']
         uid = self.nicks[fromnick.lower()]
-        self.sendLine(u':{0} PRIVMSG {1} :{2}'.format(uid, destchan, message).encode('utf-8'))
+        self.sendLine(u':{0} PRIVMSG {1} :{2}'.format(uid, destchan, message))
 
 
 class IRCFactory(BasicFactory):

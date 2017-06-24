@@ -2,18 +2,31 @@ from twisted.internet.protocol import ClientFactory
 from twisted.protocols.basic import LineReceiver
 from twisted.internet import reactor, ssl
 import logging
+import sys
 
 __all__ = []
 logger = logging.getLogger('chatrelay')
 
 servers = {}
 
+def tobytes(s):
+    if sys.version_info >= (3, 0):
+        return bytes(s, encoding='utf-8')
+    else:
+        return s.encode('utf-8')
+
+def tostr(b):
+    if sys.version_info >= (3, 0):
+        return str(b, encoding='utf-8')
+    else:
+        return b
+
 class TextProto(LineReceiver):
     """Basics for a text-based protocol"""
 
     def sendLine(self, line):
-        logger.debug("{0} => {1}".format(self.conf['name'], line))
-        LineReceiver.sendLine(self, line)
+        logger.debug(u'{0} => {1}'.format(self.conf['name'], line))
+        LineReceiver.sendLine(self, tobytes(line))
 
 
 class BasicFactory(ClientFactory):
