@@ -10,6 +10,9 @@ logger = logging.getLogger('chatrelay')
 def time():
     return int(_time())
 
+def stripcolor(text):
+    return re.sub(r'\\x03[0-9]{1,2}', '', text)
+
 class IRCLine(object):
     """Represents a parsed IRC line, both server and client protocols"""
 
@@ -103,10 +106,12 @@ class IRC(TextProto):
         elif line.cmd == 'PING':
             self.sendLine(u'PONG :{0}'.format(line.text))
         elif line.cmd == 'PRIVMSG':
+            # do relay
             for mychan, map in self.conf['channel_map'].items():
                 if mychan in line.args:
                     for dest, destchan in map.items():
-                        servers[dest].relay_message(destchan, line.text, line.handle.nick, self.conf['name'])
+                        mtext = stripcolor(line.text)
+                        servers[dest].relay_message(destchan, mtext, line.handle.nick, self.conf['name'])
 
     def connectionMade(self):
         logger.info(u'{name} :: Connected'.format(**self.conf))
@@ -158,10 +163,12 @@ class UnrealServ(TextProto):
         elif line.cmd == 'UID':
             self.remote_nicks.add(line.args[0].lower())
         elif line.cmd == 'PRIVMSG':
+            # do relay
             for mychan, map in self.conf['channel_map'].items():
                 if mychan in line.args:
                     for dest, destchan in map.items():
-                        servers[dest].relay_message(destchan, line.text, line.prefix, self.conf['name'])
+                        mtext = stripcolor(line.text)
+                        servers[dest].relay_message(destchan, mtext, line.prefix, self.conf['name'])
 
     def relay_message(self, destchan, message, fromnick=None, fromserver=None):
         if fromnick:

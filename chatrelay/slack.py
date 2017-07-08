@@ -14,7 +14,6 @@ def apiurl(tail):
 
 class SlackBot(WebSocketClientProtocol):
     SILENT_IGNORE = ('hello', 'user_typing', 'reconnect_url', 'presence_change')
-    IGNORE_MESSAGE_SUBTYPES = ('message_deleted', 'message_changed')
 
     def onConnect(self, response):
         logger.debug('{0} :: Connected'.format(self.conf['name']))
@@ -26,7 +25,11 @@ class SlackBot(WebSocketClientProtocol):
         if not self.conf.get('relay_service_messages', True) and not fromnick:
             logger.debug('{0} :: Ignoring service message'.format(self.conf['name']))
             return
+
+        # remove hash mark if configured on other servers
         destchan = destchan.lstrip('#')
+
+        # prepare postMessage request
         params = {
             'token': self.conf['api_token'],
             'channel': destchan,
@@ -34,13 +37,18 @@ class SlackBot(WebSocketClientProtocol):
             'as_user': True,
         }
         if fromnick:
+            # disambiguate sender
             current_users = self._state.users.values()
             if fromnick in current_users:
                 fromnick += '_'+fromserver
             while fromnick in current_users:
                 fromnick += '_'
+
+            # update request
             params['as_user'] = False
             params['username'] = fromnick
+
+        # send request
         logger.debug('{0} => username={1} channel={2} :{3}'.format(self.conf['name'], fromnick, destchan, message))
         m = requests.get(apiurl('chat.postMessage'), params=params)
         res = m.json()
@@ -56,12 +64,25 @@ class SlackBot(WebSocketClientProtocol):
             return '@unknown'
 
     def _prepare_mtext(self, msg):
-        msgparts = [msg['text']]
+        if 'text' in msg:
+            msgparts = [msg['text']]
+        else:
+            logger.warning('>> No "text" for message')
+            msgparts = []
+
+        # handle attachments
         for attachment in msg.get('attachments', []):
             msgparts.append(attachment['fallback'])
         mtext = ' | '.join(msgparts)
+
+        # replace any user IDs with username
         mtext = re.sub(r'<@U[A-Z0-9]+\|([^>]+)>', r'@\1', mtext)
         mtext = re.sub(r'<@(U[A-Z0-9]+)>', self._replace_userid, mtext)
+
+        # replace channel IDs
+        mtext = re.sub(r'<#C[A-Z0-9]+\|([^>]+)>', r'#\1', mtext)
+
+        # replace emojis
         for name, emoji in self.conf.get('emoji_map', {}).items():
             mtext = mtext.replace(name, emoji)
         return mtext
@@ -78,11 +99,11 @@ class SlackBot(WebSocketClientProtocol):
         elif mtype == 'message':
             # check for ignored messages
             subtype = msg.get('subtype')
-            if subtype in SlackBot.IGNORE_MESSAGE_SUBTYPES:
-                logger.debug('>> Ignoring {0} subtype'.format(subtype))
-                return
             if msg.get('bot_id') == self.conf['bot_id']:
                 logger.debug('>> Ignoring own message')
+                return
+            if msg.get('hidden'):
+                logger.debug('>> Ignoring hidden subtype')
                 return
 
             # Obtain channel name and user name
@@ -101,6 +122,9 @@ class SlackBot(WebSocketClientProtocol):
 
             # Prepare message text
             mtext = self._prepare_mtext(msg)
+            if not mtext:
+                logger.warning('>> Could not find any message to send')
+                return
             logger.debug(u'>> Recvd message from {0} to {1}: {2}'.format(user, channel, mtext))
 
             # Do relay
@@ -133,12 +157,19 @@ class SlackWSFactory(WebSocketClientFactory):
 
     @classmethod
     def init_connection(cls, conf):
+        # Remove hash marks from configured channels if present
+        channel_map = {}
+        for mychannel, map in conf['channel_map'].items():
+            mychannel = mychannel.lstrip('#')
+            channel_map[mychannel] = map
+        conf['channel_map'] = channel_map
+
+        # Get server state and RTM setup info
         rtmc = requests.get(apiurl('rtm.start'), params={'token': conf['api_token']})
         res = rtmc.json()
         if not res['ok']:
             logger.debug('Slack API rtm.start response:\n{0}'.format(rtmc.text))
             raise RuntimeError('Failed to connect to Slack')
-
         wsurl = res['url']
         logger.debug('{0} :: Got websocket url = {1}'.format(conf['name'], wsurl))
         logger.debug('{0} :: rtm.start response\n{1}'.format(
@@ -147,6 +178,7 @@ class SlackWSFactory(WebSocketClientFactory):
         state = State(res, slackbot_username)
         factory = cls(conf, state, wsurl)
 
+        # Start RTM connection
         isSecure, host, port, resource, path, params = parse_ws_url(wsurl)
         logger.debug('{0} :: Connecting to {1}:{2} secure={3}'.format(conf['name'], host, port, isSecure))
         if isSecure:
@@ -160,12 +192,16 @@ class SlackWSFactory(WebSocketClientFactory):
         WebSocketClientFactory.__init__(self, wsurl)
 
     def buildProtocol(self, addr):
+        # Set up websocket protocol
         name = self.conf['name']
         logger.debug('{0} :: buildProtocol'.format(name))
         proto = WebSocketClientFactory.buildProtocol(self, addr)
         proto.conf = self.conf
         proto._state = self._state
+
+        # Register the protocol object globally
         servers[name] = proto
+
         return proto
 
 
