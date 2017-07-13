@@ -7,6 +7,9 @@ Currently supported connection methods:
 * Unreal IRCd server
 * Slack bot
 
+In progress:
+* Matrix
+
 You can configure an arbitrary number of connections, and route messages
 between any/all of them. Take a look at `config-example.yaml` for more details.
 

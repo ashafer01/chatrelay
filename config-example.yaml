@@ -12,6 +12,7 @@ protocols:
   irc: [chatrelay.irc, IRCFactory]
   unrealserv: [chatrelay.irc, UnrealServFactory]
   slackbot: [chatrelay.slack, SlackWSFactory]
+  matrix: [chatrelay.matrix, SynapseRelay]
 
 # A list of connections to establish
 # `name` must be unique amongst all connections, and should be the shortest
@@ -145,3 +146,25 @@ servers:
         - "#slack-gen"
         - "#random"
         - "#announce"
+
+  # Create synapse homeserver
+  - name: matrix
+    protocol: matrix
+
+    # Actual synapse server name
+    server_name: example.org
+
+    # sqlite3 database file path
+    db_file: /var/local/chatrelay/synapse_relay.db
+
+    # Path to the signing key
+    signing_key_path: /var/local/chatrelay/synapse_signing_key
+
+    # A long (>=50 chars) random string - if missing or too short on startup, startup
+    # will fail and a new key will be generated for you
+    macaroon_secret_key: "......"
+
+    # listeners can contain any listeners parameters from the actual synapse config
+    # only `port` is required here
+    listeners:
+        - port: 8118
